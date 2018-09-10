@@ -9,6 +9,11 @@ package main
 //   mvwprintw(window, line, column, s);
 // }
 import "C"
+import (
+	"math/rand"
+	"strconv"
+	"time"
+)
 
 //noinspection GoVarAndConstTypeMayBeOmitted
 func main() {
@@ -18,28 +23,27 @@ func main() {
 	C.curs_set(C.int(0))
 	C.halfdelay(C.int(2))
 
-	width := 20
-	height := 10
-
-	var snake = &Snake{
-		cells:     []Cell{{4, 0}, {3, 0}, {2, 0}, {1, 0}, {0, 0}},
-		direction: right,
+	var game = &Game{
+		width:  20,
+		height: 10,
+		snake: Snake{
+			cells:     []Cell{{4, 0}, {3, 0}, {2, 0}, {1, 0}, {0, 0}},
+			direction: right,
+		},
+		apples: Apples{
+			width:       20,
+			height:      10,
+			growthSpeed: 3,
+			random:      rand.New(rand.NewSource(time.Now().UnixNano())),
+		},
 	}
 
-	window := C.newwin(C.int(height+2), C.int(width+2), 0, 0)
+	window := C.newwin(C.int(game.height+2), C.int(game.width+2), 0, 0)
 	defer C.delwin(window)
 
 	var c C.int = 0
 	for c != 'q' {
-		C.wclear(window)
-		C.box(window, 0, 0)
-
-		for _, cell := range snake.Tail() {
-			C.wprint(window, C.int(cell.y+1), C.int(cell.x+1), C.CString("o"))
-		}
-		C.wprint(window, C.int(snake.Head().y+1), C.int(snake.Head().x+1), C.CString("Q"))
-
-		C.wrefresh(window)
+		draw(window, game)
 
 		c = C.wgetch(window)
 		var direction = none
@@ -53,7 +57,65 @@ func main() {
 		case 'l':
 			direction = right
 		}
-		snake = snake.Turn(direction).Move()
+
+		game = game.update(direction)
+	}
+}
+
+func draw(window *C.WINDOW, game *Game) {
+	C.wclear(window)
+	C.box(window, 0, 0)
+
+	for _, cell := range game.apples.cells {
+		C.wprint(window, C.int(cell.y+1), C.int(cell.x+1), C.CString("."))
+	}
+	for _, cell := range game.snake.Tail() {
+		C.wprint(window, C.int(cell.y+1), C.int(cell.x+1), C.CString("o"))
+	}
+	head := game.snake.Head()
+	C.wprint(window, C.int(head.y+1), C.int(head.x+1), C.CString("Q"))
+
+	if game.IsOver() {
+		C.wprint(window, C.int(0), C.int(4), C.CString("Game is Over"))
+		C.wprint(window, C.int(1), C.int(3), C.CString("Your score is "+strconv.Itoa(game.Score())))
+	}
+
+	C.wrefresh(window)
+}
+
+type Game struct {
+	width  int
+	height int
+	snake  Snake
+	apples Apples
+}
+
+func (game Game) Score() int {
+	return len(game.snake.cells)
+}
+func (game Game) IsOver() bool {
+	if contains(game.snake.Tail(), *game.snake.Head()) {
+		return true
+	}
+	for _, cell := range game.snake.cells {
+		if cell.x < 0 || cell.x >= game.width || cell.y < 0 || cell.y >= game.height {
+			return true
+		}
+	}
+	return false
+}
+func (game Game) update(direction Direction) *Game {
+	if game.IsOver() {
+		return &game
+	}
+
+	var newSnake, newApples = game.snake.Turn(direction).Move().eat(game.apples.Grow())
+
+	return &Game{
+		width:  game.width,
+		height: game.height,
+		snake:  *newSnake,
+		apples: newApples,
 	}
 }
 
@@ -82,6 +144,44 @@ func (snake *Snake) Turn(newDirection Direction) *Snake {
 	}
 	return &Snake{cells: snake.cells, direction: newDirection}
 }
+func (snake *Snake) eat(apples Apples) (*Snake, Apples) {
+	if !contains(apples.cells, *snake.Head()) {
+		return snake, apples
+	}
+	return snake, apples // TODO
+}
+
+type Apples struct {
+	width       int
+	height      int
+	cells       []Cell
+	growthSpeed int
+	random      *rand.Rand
+}
+
+func (apples Apples) Grow() Apples {
+	if apples.random.Intn(apples.growthSpeed) != 0 {
+		return apples
+	}
+	randomCell := Cell{
+		x: apples.random.Intn(apples.width),
+		y: apples.random.Intn(apples.height),
+	}
+	var newCells []Cell
+	if !contains(apples.cells, randomCell) {
+		newCells = append(apples.cells, randomCell)
+	} else {
+		newCells = apples.cells
+	}
+
+	return Apples{
+		width:       apples.width,
+		height:      apples.height,
+		cells:       newCells,
+		growthSpeed: apples.growthSpeed,
+		random:      apples.random,
+	}
+}
 
 type Cell struct {
 	x int
@@ -100,6 +200,14 @@ func (cell *Cell) Move(direction Direction) Cell {
 		return Cell{cell.x + 1, cell.y}
 	}
 	return *cell
+}
+func contains(cells []Cell, cell Cell) bool {
+	for _, it := range cells {
+		if it == cell {
+			return true
+		}
+	}
+	return false
 }
 
 type Direction int

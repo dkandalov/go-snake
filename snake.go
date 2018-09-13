@@ -58,7 +58,7 @@ func main() {
 			direction = right
 		}
 
-		game = game.update(direction)
+		game = game.Update(direction)
 	}
 }
 
@@ -104,12 +104,12 @@ func (game Game) IsOver() bool {
 	}
 	return false
 }
-func (game Game) update(direction Direction) *Game {
+func (game Game) Update(direction Direction) *Game {
 	if game.IsOver() {
 		return &game
 	}
 
-	var newSnake, newApples = game.snake.Turn(direction).Move().eat(game.apples.Grow())
+	var newSnake, newApples = game.snake.Turn(direction).Move().Eat(game.apples.Grow())
 
 	return &Game{
 		width:  game.width,
@@ -120,16 +120,29 @@ func (game Game) update(direction Direction) *Game {
 }
 
 type Snake struct {
-	cells     []Cell
-	direction Direction
+	cells       []Cell
+	direction   Direction
+	eatenApples int
 }
 
 func (snake *Snake) Move() *Snake {
 	newHead := snake.Head().Move(snake.direction)
-	newTail := snake.cells[:len(snake.cells)-1]
+
+	var newTail []Cell
+	var eatenApples = snake.eatenApples
+	if eatenApples == 0 {
+		newTail = snake.cells[:len(snake.cells)-1]
+	} else {
+		newTail = snake.cells
+	}
+	if eatenApples > 0 {
+		eatenApples--
+	}
+
 	return &Snake{
-		cells:     append([]Cell{newHead}, newTail...),
-		direction: snake.direction,
+		cells:       append([]Cell{newHead}, newTail...),
+		direction:   snake.direction,
+		eatenApples: eatenApples,
 	}
 }
 func (snake *Snake) Head() *Cell {
@@ -138,17 +151,24 @@ func (snake *Snake) Head() *Cell {
 func (snake *Snake) Tail() []Cell {
 	return snake.cells[1:]
 }
-func (snake *Snake) Turn(newDirection Direction) *Snake {
-	if newDirection == none || newDirection.IsOpposite(snake.direction) {
+func (snake *Snake) Turn(direction Direction) *Snake {
+	if direction == none || direction.IsOpposite(snake.direction) {
 		return snake
 	}
-	return &Snake{cells: snake.cells, direction: newDirection}
+	return snake.withDirection(direction)
 }
-func (snake *Snake) eat(apples Apples) (*Snake, Apples) {
+func (snake *Snake) Eat(apples Apples) (*Snake, Apples) {
 	if !contains(apples.cells, *snake.Head()) {
 		return snake, apples
 	}
-	return snake, apples // TODO
+	newApples := apples.withCells(remove(*snake.Head(), apples.cells))
+	return snake.withEatenApples(snake.eatenApples + 1), newApples
+}
+func (snake *Snake) withDirection(direction Direction) *Snake {
+	return &Snake{cells: copyCells(snake.cells), direction: direction, eatenApples: snake.eatenApples}
+}
+func (snake *Snake) withEatenApples(eatenApples int) *Snake {
+	return &Snake{cells: copyCells(snake.cells), direction: snake.direction, eatenApples: eatenApples}
 }
 
 type Apples struct {
@@ -173,11 +193,19 @@ func (apples Apples) Grow() Apples {
 	} else {
 		newCells = apples.cells
 	}
-
 	return Apples{
 		width:       apples.width,
 		height:      apples.height,
 		cells:       newCells,
+		growthSpeed: apples.growthSpeed,
+		random:      apples.random,
+	}
+}
+func (apples Apples) withCells(cells []Cell) Apples {
+	return Apples{
+		width:       apples.width,
+		height:      apples.height,
+		cells:       cells,
 		growthSpeed: apples.growthSpeed,
 		random:      apples.random,
 	}
@@ -201,13 +229,33 @@ func (cell *Cell) Move(direction Direction) Cell {
 	}
 	return *cell
 }
-func contains(cells []Cell, cell Cell) bool {
-	for _, it := range cells {
+func indexOf(cell Cell, cells []Cell) int {
+	for i, it := range cells {
 		if it == cell {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
+}
+func contains(cells []Cell, cell Cell) bool {
+	if indexOf(cell, cells) == -1 {
+		return false
+	}
+	return true
+}
+func remove(cell Cell, cells []Cell) []Cell {
+	i := indexOf(cell, cells)
+	if i == -1 {
+		return cells
+	}
+	newCells := copyCells(cells)
+	newCells[i] = newCells[len(newCells)-1]
+	return newCells[:len(newCells)-1]
+}
+func copyCells(cells []Cell) []Cell {
+	result := make([]Cell, len(cells))
+	copy(result, cells)
+	return result
 }
 
 type Direction int

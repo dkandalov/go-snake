@@ -41,13 +41,13 @@ func main() {
 	window := C.newwin(C.int(game.height+2), C.int(game.width+2), 0, 0)
 	defer C.delwin(window)
 
-	var c C.int = 0
-	for c != 'q' {
+	var input C.int = 0
+	for input != 'q' {
 		draw(window, game)
 
-		c = C.wgetch(window)
+		input = C.wgetch(window)
 		var direction = none
-		switch c {
+		switch input {
 		case 'i':
 			direction = up
 		case 'j':
@@ -76,7 +76,7 @@ func draw(window *C.WINDOW, game *Game) {
 	C.wprint(window, C.int(head.y+1), C.int(head.x+1), C.CString("Q"))
 
 	if game.IsOver() {
-		C.wprint(window, C.int(0), C.int(4), C.CString("Game is Over"))
+		C.wprint(window, C.int(0), C.int(6), C.CString("Game Over"))
 		C.wprint(window, C.int(1), C.int(3), C.CString("Your score is "+strconv.Itoa(game.Score())))
 	}
 

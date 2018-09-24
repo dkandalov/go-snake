@@ -180,7 +180,7 @@ type Apples struct {
 }
 
 func (apples Apples) Grow() Apples {
-	if apples.random.Intn(apples.growthSpeed) != 0 {
+	if apples.random.Intn(10) >= apples.growthSpeed {
 		return apples
 	}
 	randomCell := Cell{
